@@ -1,0 +1,12 @@
+# gussari - AI 重放师 依赖清单
+# 安装: pip install -r requirements.txt
+#
+# 说明:
+# - server.py 与 src/* 零依赖，仅需 Python 3.6+ 标准库
+# - client/ai_client.py 需要 requests（推荐）
+# - client/browser_login.py 和 AI 浏览器自动化功能需要 playwright
+# - playwright 使用系统 Chrome（channel='chrome'），无需单独下载浏览器内核
+# - 服务运行后，管理页也提供 playwright 一键安装（清华镜像）
+
+requests>=2.20
+playwright>=1.40

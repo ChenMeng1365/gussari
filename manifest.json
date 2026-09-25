@@ -1,0 +1,8 @@
+{
+  "icon": "🔐",
+  "name": "AI 重放师",
+  "description": "AI 访问网站的凭据管理：人工登录一次，AI 自动复用 Cookie / Token / 浏览器会话",
+  "tags": ["凭据", "AI", "自动化", "会话"],
+  "url": "http://127.0.0.1:3366/",
+  "startScript": "start.bat"
+}

@@ -141,3 +141,24 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# ---- 运行日志 ----
+server.log
+
+# ---- 凭据数据（敏感，禁止入库）----
+data/credentials.json
+data/*.json
+
+# ---- 临时文件 ----
+.temp/
+
+# ---- 数据文件 ----
+data/

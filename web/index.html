@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 重放师</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Microsoft YaHei","Segoe UI",sans-serif;font-size:14px;color:#333;background:#f5f5f5}
+.container{max-width:920px;margin:0 auto;padding:16px}
+header{background:#4A90D9;color:#fff;padding:12px 20px;border-radius:6px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:18px;font-weight:600}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:#4caf50}
+nav{display:flex;gap:4px;margin-bottom:16px}
+nav button{padding:8px 16px;border:1px solid #D6E4F0;background:#fff;color:#4A90D9;cursor:pointer;border-radius:4px 4px 0 0;font-size:14px}
+nav button.active{background:#4A90D9;color:#fff;border-color:#4A90D9}
+.tab-content{display:none}.tab-content.active{display:block}
+.card{background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:16px;margin-bottom:12px}
+.card h3{margin-bottom:12px;color:#4A90D9;font-size:15px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #eee;font-size:13px}
+th{background:#E8F1FA;color:#4A90D9;font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px}
+.badge.active{background:#e8f5e9;color:#2e7d32}
+.badge.expired{background:#fbe9e7;color:#c62828}
+.badge.pending{background:#fff3e0;color:#ef6c00}
+.form-group{margin-bottom:10px}
+.form-group label{display:block;margin-bottom:4px;color:#666;font-size:13px}
+.form-group input,.form-group textarea,.form-group select{width:100%;padding:7px;border:1px solid #ddd;border-radius:4px;font-size:14px}
+.form-group textarea{min-height:56px;font-family:monospace;resize:vertical}
+.btn{padding:7px 18px;border:none;border-radius:4px;cursor:pointer;font-size:14px}
+.btn-primary{background:#4A90D9;color:#fff}
+.btn-primary:hover{background:#3a7bc8}
+.btn-danger{background:#f44336;color:#fff}
+.btn-danger:hover{background:#d32f2f}
+.btn-sm{padding:4px 10px;font-size:13px}
+.btn-gray{background:#eee;color:#666}
+.alert{padding:8px 14px;border-radius:4px;margin-bottom:10px}
+.alert-info{background:#E8F1FA;color:#4A90D9}
+.alert-warning{background:#fff3e0;color:#ef6c00}
+.alert-success{background:#e8f5e9;color:#2e7d32}
+.muted{color:#999;font-size:12px}
+pre{background:#f5f5f5;padding:12px;border-radius:4px;overflow-x:auto;font-size:13px;line-height:1.6;white-space:pre-wrap}
+code{background:#f0f0f0;padding:2px 6px;border-radius:3px;font-size:13px}
+.pending-item{border-left:3px solid #ff9800;padding:12px;background:#fffbeb;margin-bottom:8px;border-radius:0 4px 4px 0}
+.pending-item:hover{background:#fffde7}
+.empty{text-align:center;padding:28px;color:#999}
+.row{display:flex;gap:8px;align-items:center}
+.row>.form-group{flex:1}
+.actions{display:flex;gap:6px}
+#toast{position:fixed;top:16px;right:16px;z-index:9999}
+.toast-msg{padding:10px 20px;border-radius:4px;margin-bottom:8px;animation:fadeIn .3s;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+#pending-count{background:#ff9800;color:#fff;padding:1px 7px;border-radius:10px;font-size:11px;display:none;animation:pulse 1.5s infinite}
+.ep{margin-bottom:12px;padding:10px;border:1px solid #eee;border-radius:4px}
+.ep-method{display:inline-block;padding:2px 8px;border-radius:3px;font-size:12px;font-weight:600;margin-right:8px}
+.ep-get{background:#e3f2fd;color:#1565c0}
+.ep-post{background:#e8f5e9;color:#2e7d32}
+.ep-delete{background:#fbe9e7;color:#c62828}
+.ep-path{font-family:monospace;font-size:13px;color:#333}
+.ep-desc{color:#666;font-size:13px;margin-top:4px}
+a{color:#4A90D9}
+</style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>AI 重放师</h1>
+        <div><span class="status-dot"></span><span id="server-info">服务运行中</span></div>
+    </header>
+    <nav>
+        <button class="active" data-tab="credentials" onclick="switchTab('credentials')">凭据管理</button>
+        <button data-tab="pending" onclick="switchTab('pending')">登录请求 <span id="pending-count">0</span></button>
+        <button data-tab="recorder" onclick="switchTab('recorder')">脚本录制</button>
+        <button data-tab="docs" onclick="switchTab('docs')">API 文档</button>
+    </nav>
+
+    <!-- 凭据管理 -->
+    <div id="tab-credentials" class="tab-content active">
+        <div class="card">
+            <h3>浏览器登录捕获（推荐）</h3>
+            <div id="cap-dep" style="display:none"></div>
+            <div class="form-group">
+                <label>登录页面 URL *</label>
+                <input type="text" id="cap-url" placeholder="https://example.com/login">
+            </div>
+            <div class="row">
+                <div class="form-group">
+                    <label>站点标识（留空自动取域名）</label>
+                    <input type="text" id="cap-site" placeholder="example.com">
+                </div>
+                <div class="form-group" style="max-width:130px">
+                    <label>浏览器</label>
+                    <select id="cap-channel">
+                        <option value="chrome">Chrome</option>
+                        <option value="msedge">Edge</option>
+                    </select>
+                </div>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn btn-primary" onclick="startCapture()">开始登录捕获</button>
+            </div>
+            <div id="cap-session" style="display:none;margin-top:12px;padding:12px;border:1px solid #ffe0b2;background:#fff8e1;border-radius:4px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <strong id="cap-session-site" style="color:#e65100"></strong>
+                    <span class="badge pending">捕获中</span>
+                </div>
+                <div class="muted" style="margin-bottom:4px">当前页面: <span id="cap-current-url" style="color:#333;word-break:break-all">...</span></div>
+                <div class="muted" style="margin-bottom:8px">在弹出的浏览器中完成登录后，回到本页点击下方按钮保存会话</div>
+                <div class="actions">
+                    <button type="button" class="btn btn-primary" onclick="captureAction('complete')">我已登录完成，保存</button>
+                    <button type="button" class="btn btn-gray" onclick="cancelCapture()">取消</button>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <h3>已保存凭据</h3>
+            <div id="cred-list"><div class="empty">加载中...</div></div>
+        </div>
+        <div class="card">
+            <h3 id="form-title">添加凭据</h3>
+            <form id="cred-form" onsubmit="return saveCredential(event)">
+                <input type="hidden" id="edit-mode" value="">
+                <div class="form-group">
+                    <label>站点标识 *（如 example.com）</label>
+                    <input type="text" id="f-site" required placeholder="example.com">
+                </div>
+                <div class="form-group">
+                    <label>登录页面 URL</label>
+                    <input type="text" id="f-login-url" placeholder="https://example.com/login">
+                </div>
+                <div class="row">
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input type="text" id="f-username" placeholder="登录用户名">
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="f-password" placeholder="登录密码">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Cookie（从浏览器开发者工具复制）</label>
+                    <textarea id="f-cookies" placeholder="name=value; name2=value2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Token / Bearer Token</label>
+                    <input type="text" id="f-token" placeholder="Bearer token or API key">
+                </div>
+                <div class="form-group">
+                    <label>自定义请求头 (JSON 格式，可选)</label>
+                    <textarea id="f-headers" placeholder='{"X-API-Key":"xxx","X-Custom":"yyy"}'></textarea>
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="f-notes" placeholder="备注信息">
+                </div>
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="button" class="btn btn-gray" onclick="resetForm()">重置</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 登录请求 -->
+    <div id="tab-pending" class="tab-content">
+        <div class="card">
+            <h3>待处理登录请求</h3>
+            <div id="pending-list"><div class="empty">加载中...</div></div>
+        </div>
+    </div>
+
+    <!-- 脚本录制 -->
+    <div id="tab-recorder" class="tab-content">
+        <div class="card">
+            <h3>脚本录制</h3>
+            <div class="form-group">
+                <label>站点标识 *（选择或输入）</label>
+                <div class="row">
+                    <input type="text" id="rec-site" list="rec-site-list" placeholder="example.com" style="flex:1" oninput="onRecSiteChange()">
+                    <datalist id="rec-site-list"></datalist>
+                    <select id="rec-channel" style="max-width:130px">
+                        <option value="chrome">Chrome</option>
+                        <option value="msedge">Edge</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>登录页面 URL（留空自动取已保存凭据的 URL）</label>
+                <input type="text" id="rec-login-url" placeholder="https://example.com">
+            </div>
+            <div class="row">
+                <div class="form-group">
+                    <label>脚本名称 *（英文，如 view_orders）</label>
+                    <input type="text" id="rec-name" placeholder="view_orders">
+                </div>
+                <div class="form-group">
+                    <label>显示名称</label>
+                    <input type="text" id="rec-label" placeholder="查看订单">
+                </div>
+                <div class="form-group" style="max-width:120px">
+                    <label>类型</label>
+                    <select id="rec-type">
+                        <option value="main">主操作</option>
+                        <option value="pre">前置</option>
+                        <option value="post">后置</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>描述</label>
+                <input type="text" id="rec-desc" placeholder="脚本用途说明">
+            </div>
+            <div class="actions">
+                <button type="button" class="btn btn-primary" onclick="startRecording()">开始录制</button>
+                <button type="button" class="btn btn-gray" onclick="toggleExecPanel()">添加脚本命令</button>
+            </div>
+            <div id="exec-panel" style="display:none;margin-top:12px;padding:12px;border:1px solid #e0e0e0;background:#fafafa;border-radius:4px">
+                <div class="muted" style="margin-bottom:8px">用于前置/后置的非网页操作脚本（执行系统命令）</div>
+                <div class="row">
+                    <div class="form-group">
+                        <label>脚本名称 *</label>
+                        <input type="text" id="exec-name" placeholder="init_db">
+                    </div>
+                    <div class="form-group">
+                        <label>显示名称</label>
+                        <input type="text" id="exec-label" placeholder="初始化数据库">
+                    </div>
+                    <div class="form-group" style="max-width:120px">
+                        <label>类型</label>
+                        <select id="exec-type">
+                            <option value="pre">前置</option>
+                            <option value="post">后置</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>命令 *</label>
+                    <input type="text" id="exec-command" placeholder="python init_db.py">
+                </div>
+                <div class="row">
+                    <div class="form-group">
+                        <label>工作目录（可选）</label>
+                        <input type="text" id="exec-cwd" placeholder="E:\project">
+                    </div>
+                    <div class="form-group" style="max-width:100px">
+                        <label>超时(秒)</label>
+                        <input type="number" id="exec-timeout" value="120" min="1">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <input type="text" id="exec-desc" placeholder="脚本用途说明">
+                </div>
+                <div class="actions">
+                    <button type="button" class="btn btn-primary" onclick="saveExecScript()">保存脚本</button>
+                    <button type="button" class="btn btn-gray" onclick="document.getElementById('exec-panel').style.display='none'">取消</button>
+                </div>
+            </div>
+            <div id="rec-session" style="display:none;margin-top:12px;padding:12px;border:1px solid #ffe0b2;background:#fff8e1;border-radius:4px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <strong id="rec-session-site" style="color:#e65100"></strong>
+                    <span class="badge pending">录制中</span>
+                </div>
+                <div class="muted" style="margin-bottom:4px">当前页面: <span id="rec-current-url" style="color:#333;word-break:break-all">...</span></div>
+                <div class="muted" style="margin-bottom:8px">已录制动作: <span id="rec-action-count" style="color:#333">0</span> 个</div>
+                <div class="muted" style="margin-bottom:8px">在弹出的浏览器中操作，完成后回到本页点击保存</div>
+                <div class="actions">
+                    <button type="button" class="btn btn-primary" onclick="completeRecording()">保存录制</button>
+                    <button type="button" class="btn btn-gray" onclick="cancelRecording()">取消</button>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <h3>已录制脚本</h3>
+            <div id="script-list"><div class="empty">输入站点标识后显示脚本</div></div>
+        </div>
+        <div class="card" id="replay-panel" style="display:none">
+            <h3>回放编排</h3>
+            <div id="replay-main-info" style="margin-bottom:10px"></div>
+            <div class="row">
+                <div class="form-group" style="flex:1">
+                    <label>前置脚本（按顺序选择）</label>
+                    <select id="replay-pre" multiple size="4" style="width:100%"></select>
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label>后置脚本（按顺序选择）</label>
+                    <select id="replay-post" multiple size="4" style="width:100%"></select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" id="replay-screenshots" checked> 回放时截图</label>
+            </div>
+            <div class="actions">
+                <button type="button" class="btn btn-primary" onclick="startReplay()">开始回放</button>
+                <button type="button" class="btn btn-gray" onclick="cancelReplay()">取消回放</button>
+            </div>
+            <div id="replay-status" style="display:none;margin-top:12px"></div>
+        </div>
+    </div>
+
+    <!-- API 文档 -->
+    <div id="tab-docs" class="tab-content">
+        <div class="card">
+            <h3>API 接口文档</h3>
+            <div id="docs-endpoints"></div>
+            <h3 style="margin-top:16px">Python 使用示例</h3>
+            <pre id="docs-python"></pre>
+            <h3 style="margin-top:16px">curl 使用示例</h3>
+            <pre id="docs-curl"></pre>
+        </div>
+    </div>
+</div>
+<div id="toast"></div>
+
+<script>
+var currentTab = 'credentials';
+var lastPendingCount = 0;
+var originalTitle = document.title;
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-content').forEach(function(el){el.classList.remove('active')});
+    document.querySelectorAll('nav button').forEach(function(el){el.classList.remove('active')});
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.querySelector('nav button[data-tab="' + tab + '"]').classList.add('active');
+    if (tab === 'pending') refreshPending();
+    if (tab === 'credentials') refreshCredentials();
+    if (tab === 'recorder') refreshRecorder();
+    if (tab === 'docs') loadDocs();
+}
+
+function showToast(msg, type) {
+    var toast = document.getElementById('toast');
+    var div = document.createElement('div');
+    div.className = 'toast-msg ' + (type === 'success' ? 'alert-success' : type === 'error' ? 'alert-warning' : 'alert-info');
+    div.textContent = msg;
+    toast.appendChild(div);
+    setTimeout(function(){div.remove()}, 3000);
+}
+
+function escapeHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---- 凭据管理 ----
+function refreshCredentials() {
+    fetch('/api/sites').then(function(r){return r.json()}).then(function(data) {
+        var list = document.getElementById('cred-list');
+        if (data.count === 0) {
+            list.innerHTML = '<div class="empty">暂无已保存的凭据，请在下方添加</div>';
+            return;
+        }
+        var promises = data.sites.map(function(site) {
+            return fetch('/api/status/' + encodeURIComponent(site)).then(function(r){return r.json()}).then(function(s) {
+                var badge = s.has_credentials ? '<span class="badge active">有效</span>' : '<span class="badge expired">无效</span>';
+                var lastResult = s.last_result === 'success' ? '<span style="color:#2e7d32">成功</span>' :
+                                  s.last_result === 'fail' ? '<span style="color:#c62828">失败</span>' : '-';
+                return '<tr>' +
+                    '<td><strong>' + escapeHtml(site) + '</strong></td>' +
+                    '<td>' + escapeHtml(s.username || '-') + '</td>' +
+                    '<td>' + (s.has_cookies ? 'Cookie; ' : '') + (s.has_token ? 'Token; ' : '') + (s.has_password ? 'Pwd' : '') + '</td>' +
+                    '<td>' + (s.use_count || 0) + '</td>' +
+                    '<td>' + lastResult + '</td>' +
+                    '<td>' + (s.last_updated || '-') + '</td>' +
+                    '<td class="actions">' +
+                        '<button class="btn btn-gray btn-sm" onclick="openSite(\'' + encodeURIComponent(site) + '\')">打开</button>' +
+                        '<button class="btn btn-primary btn-sm" onclick="editCredential(\'' + encodeURIComponent(site) + '\')">编辑</button>' +
+                        '<button class="btn btn-danger btn-sm" onclick="deleteCredential(\'' + encodeURIComponent(site) + '\')">删除</button>' +
+                    '</td>' +
+                '</tr>';
+            });
+        });
+        Promise.all(promises).then(function(rows) {
+            list.innerHTML = '<table><thead><tr><th>站点</th><th>用户名</th><th>凭据类型</th><th>使用次数</th><th>上次结果</th><th>更新时间</th><th>操作</th></tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+        });
+    }).catch(function(){});
+}
+
+var openTimers = {};
+function openSite(encodedSite) {
+    var site = decodeURIComponent(encodedSite);
+    fetch('/api/open-site/' + encodeURIComponent(site), {method: 'POST'}).then(function(r){return r.json()}).then(function(data) {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('正在打开 ' + site + '...', 'info');
+        pollOpen(site);
+    }).catch(function(){ showToast('请求失败', 'error'); });
+}
+
+function pollOpen(site) {
+    if (openTimers[site]) clearInterval(openTimers[site]);
+    openTimers[site] = setInterval(function() {
+        fetch('/api/open-site/' + encodeURIComponent(site)).then(function(r){return r.json()}).then(function(data) {
+            if (data.status === 'opened' || data.status === 'failed' || data.status === 'missing') {
+                clearInterval(openTimers[site]); openTimers[site] = null;
+                if (data.status === 'failed') showToast('打开失败: ' + (data.error || ''), 'error');
+            }
+        }).catch(function(){});
+    }, 1500);
+}
+
+function editCredential(encodedSite) {
+    var site = decodeURIComponent(encodedSite);
+    fetch('/api/credentials/' + encodeURIComponent(site)).then(function(r){return r.json()}).then(function(data) {
+        if (data.status !== 'found') { showToast('凭据不存在', 'error'); return; }
+        var d = data.data;
+        document.getElementById('edit-mode').value = site;
+        document.getElementById('f-site').value = site;
+        document.getElementById('f-site').readOnly = true;
+        document.getElementById('f-login-url').value = d.login_url || '';
+        document.getElementById('f-username').value = d.username || '';
+        document.getElementById('f-password').value = d.password || '';
+        document.getElementById('f-cookies').value = d.cookies || '';
+        document.getElementById('f-token').value = d.token || '';
+        document.getElementById('f-headers').value = d.headers ? JSON.stringify(d.headers, null, 2) : '';
+        document.getElementById('f-notes').value = d.notes || '';
+        document.getElementById('form-title').textContent = '编辑凭据: ' + site;
+        document.getElementById('cred-form').scrollIntoView({behavior:'smooth'});
+    });
+}
+
+function deleteCredential(encodedSite) {
+    var site = decodeURIComponent(encodedSite);
+    if (!confirm('确认删除 ' + site + ' 的凭据？')) return;
+    fetch('/api/credentials/' + encodeURIComponent(site), {method:'DELETE'}).then(function(r){return r.json()}).then(function(data) {
+        if (data.status === 'deleted') { showToast('已删除', 'success'); refreshCredentials(); }
+        else showToast('删除失败', 'error');
+    });
+}
+
+// ---- 浏览器登录捕获 ----
+var captureSite = null;
+var captureTimer = null;
+var captureBusy = false;
+
+// ---- 依赖自检与一键安装 ----
+var depTimer = null;
+var depWasMissing = false;
+
+function renderDependency(data) {
+    var box = document.getElementById('cap-dep');
+    if (data.playwright) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        if (depTimer) { clearInterval(depTimer); depTimer = null; }
+        if (depWasMissing) { showToast('playwright 已就绪，可以开始登录捕获', 'success'); depWasMissing = false; }
+        return;
+    }
+    depWasMissing = true;
+    var html = '<div style="padding:10px;border:1px solid #ffe0b2;background:#fff8e1;border-radius:4px">';
+    html += '<div style="margin-bottom:6px;color:#e65100">未安装 playwright（浏览器登录捕获需要）</div>';
+    if (data.running) {
+        html += '<div class="muted">正在用服务自身的 Python 安装（清华镜像加速），请稍候...</div>';
+    } else {
+        html += '<button type="button" class="btn btn-primary btn-sm" onclick="installPlaywright()">一键安装 playwright</button>';
+    }
+    if (data.result === 'failed') {
+        html += '<div style="color:#c62828;margin-top:6px">上次安装失败，请把下方日志完整反馈</div>';
+    }
+    if (data.log && data.log.length) {
+        html += '<pre style="margin-top:8px;max-height:160px;overflow-y:auto;background:#f5f5f5;font-size:12px" id="dep-log">' + escapeHtml(data.log.join('\n')) + '</pre>';
+    }
+    html += '</div>';
+    box.innerHTML = html;
+    box.style.display = 'block';
+    var lg = document.getElementById('dep-log');
+    if (lg) lg.scrollTop = lg.scrollHeight;
+    if (!depTimer) depTimer = setInterval(refreshDependency, 2000);
+}
+
+function refreshDependency() {
+    fetch('/api/dependency').then(function(r){return r.json()}).then(function(data) {
+        renderDependency(data);
+    }).catch(function(){});
+}
+
+function installPlaywright() {
+    fetch('/api/dependency/install', {method: 'POST'}).then(function(r){return r.json()}).then(function(data) {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('开始安装 playwright...', 'info');
+        refreshDependency();
+    }).catch(function(){ showToast('请求失败', 'error'); });
+}
+
+function siteFromUrl(url) {
+    try { return new URL(url).host; } catch(e) { return ''; }
+}
+
+function normalizeUrl(url) {
+    url = (url || '').trim();
+    if (!url) return '';
+    if (url.indexOf('http://') !== 0 && url.indexOf('https://') !== 0) url = 'https://' + url;
+    return url;
+}
+
+function setCaptureButtons(busy) {
+    captureBusy = busy;
+    var btns = document.querySelectorAll('#cap-session .actions button');
+    for (var i = 0; i < btns.length; i++) btns[i].disabled = busy;
+}
+
+function startCapture() {
+    var url = normalizeUrl(document.getElementById('cap-url').value);
+    if (!url) { showToast('请输入登录页面 URL', 'error'); return; }
+    document.getElementById('cap-url').value = url;
+    var site = document.getElementById('cap-site').value.trim() || siteFromUrl(url);
+    if (!site) { showToast('无法从 URL 识别站点标识，请手动填写', 'error'); return; }
+    fetch('/api/capture-login/' + encodeURIComponent(site), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({login_url: url, channel: document.getElementById('cap-channel').value})
+    }).then(function(r){return r.json()}).then(function(data) {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('浏览器已启动，请完成登录', 'success');
+        showCapturePanel(site);
+    }).catch(function(){ showToast('请求失败，服务是否在线？', 'error'); });
+}
+
+function showCapturePanel(site) {
+    captureSite = site;
+    document.getElementById('cap-session-site').textContent = site;
+    document.getElementById('cap-current-url').textContent = '...';
+    document.getElementById('cap-session').style.display = 'block';
+    setCaptureButtons(false);
+    if (captureTimer) clearInterval(captureTimer);
+    captureTimer = setInterval(pollCapture, 1500);
+    pollCapture();
+}
+
+function hideCapturePanel() {
+    if (captureTimer) { clearInterval(captureTimer); captureTimer = null; }
+    captureSite = null;
+    captureBusy = false;
+    document.getElementById('cap-session').style.display = 'none';
+}
+
+function pollCapture() {
+    if (!captureSite) return;
+    var site = captureSite;
+    fetch('/api/capture-login/' + encodeURIComponent(site)).then(function(r){return r.json()}).then(function(data) {
+        if (captureSite !== site) return;
+        if (data.current_url) document.getElementById('cap-current-url').textContent = data.current_url;
+        if (data.status === 'active') return;
+        hideCapturePanel();
+        if (data.status === 'completed') {
+            showToast('登录会话已保存（' + (data.cookies_count || 0) + ' 个 Cookie）: ' + site, 'success');
+            refreshCredentials();
+            refreshPending();
+        } else if (data.status === 'cancelled') {
+            showToast('已取消捕获', 'info');
+        } else {
+            showToast('捕获结束: ' + (data.error || data.status), 'error');
+        }
+    }).catch(function(){});
+}
+
+function captureAction(action) {
+    if (!captureSite || captureBusy) return;
+    if (action === 'cancel' && !confirm('取消并关闭浏览器窗口？')) return;
+    setCaptureButtons(true);
+    fetch('/api/capture-login/' + encodeURIComponent(captureSite) + '/' + action, {method: 'POST'})
+        .then(function(r){return r.json()}).then(function(data) {
+            if (data.error) { setCaptureButtons(false); showToast(data.error, 'error'); return; }
+            if (action === 'complete') showToast('正在捕获并保存会话...', 'info');
+        }).catch(function(){ setCaptureButtons(false); showToast('请求失败', 'error'); });
+}
+
+function cancelCapture() { captureAction('cancel'); }
+
+function restoreCaptureSessions() {
+    fetch('/api/capture-login/list').then(function(r){return r.json()}).then(function(data) {
+        var active = null;
+        (data.captures || []).forEach(function(c) {
+            if (c.status === 'active' && !active) active = c;
+        });
+        if (active) {
+            showCapturePanel(active.site);
+            showToast('已恢复进行中的捕获会话: ' + active.site, 'info');
+        }
+    }).catch(function(){});
+}
+
+function resetForm() {
+    document.getElementById('cred-form').reset();
+    document.getElementById('edit-mode').value = '';
+    document.getElementById('f-site').readOnly = false;
+    document.getElementById('form-title').textContent = '添加凭据';
+}
+
+function saveCredential(e) {
+    e.preventDefault();
+    var site = document.getElementById('f-site').value.trim();
+    if (!site) { showToast('请输入站点标识', 'error'); return false; }
+    var headers = {};
+    var headersStr = document.getElementById('f-headers').value.trim();
+    if (headersStr) {
+        try { headers = JSON.parse(headersStr); }
+        catch(err) { showToast('自定义请求头 JSON 格式错误', 'error'); return false; }
+    }
+    var body = {
+        username: document.getElementById('f-username').value.trim(),
+        password: document.getElementById('f-password').value,
+        cookies: document.getElementById('f-cookies').value.trim(),
+        token: document.getElementById('f-token').value.trim(),
+        headers: headers,
+        login_url: normalizeUrl(document.getElementById('f-login-url').value),
+        notes: document.getElementById('f-notes').value.trim()
+    };
+    fetch('/api/credentials/' + encodeURIComponent(site), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    }).then(function(r){return r.json()}).then(function(data) {
+        if (data.status === 'saved') { showToast('凭据已保存', 'success'); resetForm(); refreshCredentials(); }
+        else showToast('保存失败', 'error');
+    });
+    return false;
+}
+
+// ---- 登录请求 ----
+function refreshPending() {
+    fetch('/api/pending').then(function(r){return r.json()}).then(function(data) {
+        var count = data.count || 0;
+        var badge = document.getElementById('pending-count');
+        badge.textContent = count;
+        badge.style.display = count > 0 ? 'inline-block' : 'none';
+
+        // 新请求提醒
+        if (count > lastPendingCount) {
+            beep();
+            notifyRequest(data.pending[0]);
+        }
+        lastPendingCount = count;
+
+        // 标题闪烁
+        if (count > 0) startTitleFlash(count); else stopTitleFlash();
+
+        var list = document.getElementById('pending-list');
+        if (count === 0) {
+            list.innerHTML = '<div class="empty">暂无待处理的登录请求</div>';
+            return;
+        }
+        var html = '';
+        data.pending.forEach(function(req) {
+            html += '<div class="pending-item">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+                    '<strong style="color:#e65100">' + escapeHtml(req.site) + '</strong>' +
+                    '<span class="muted">' + escapeHtml(req.created_at) + '</span>' +
+                '</div>' +
+                (req.login_url ? '<div class="muted" style="margin-bottom:4px">登录页面: <a href="' + escapeHtml(req.login_url) + '" target="_blank">' + escapeHtml(req.login_url) + '</a></div>' : '') +
+                (req.reason ? '<div class="muted" style="margin-bottom:8px">原因: ' + escapeHtml(req.reason) + '</div>' : '') +
+                '<form onsubmit="return completeLogin(event,\'' + req.request_id + '\',\'' + encodeURIComponent(req.site) + '\')" style="margin-top:6px">' +
+                    '<div class="row">' +
+                        '<input type="text" placeholder="用户名" id="u-' + req.request_id + '" style="padding:6px;border:1px solid #ddd;border-radius:4px;flex:1">' +
+                        '<input type="password" placeholder="密码" id="p-' + req.request_id + '" style="padding:6px;border:1px solid #ddd;border-radius:4px;flex:1">' +
+                    '</div>' +
+                    '<input type="text" placeholder="Cookie (可选)" id="c-' + req.request_id + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;margin-top:4px">' +
+                    '<input type="text" placeholder="Token (可选)" id="t-' + req.request_id + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;margin-top:4px">' +
+                    '<button type="submit" class="btn btn-primary btn-sm" style="margin-top:6px">提交凭据并完成</button>' +
+                '</form>' +
+            '</div>';
+        });
+        list.innerHTML = html;
+    }).catch(function(){});
+}
+
+function completeLogin(e, reqId, encodedSite) {
+    e.preventDefault();
+    var site = decodeURIComponent(encodedSite);
+    var body = {
+        username: document.getElementById('u-' + reqId).value.trim(),
+        password: document.getElementById('p-' + reqId).value,
+        cookies: document.getElementById('c-' + reqId).value.trim(),
+        token: document.getElementById('t-' + reqId).value.trim()
+    };
+    fetch('/api/complete-login/' + reqId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    }).then(function(r){return r.json()}).then(function(data) {
+        if (data.status === 'completed') { showToast('已为 ' + site + ' 保存凭据', 'success'); refreshPending(); refreshCredentials(); }
+        else showToast('提交失败', 'error');
+    });
+    return false;
+}
+
+// ---- 提醒 ----
+function beep() {
+    try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 800;
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.start(); osc.stop(ctx.currentTime + 0.3);
+    } catch(e) {}
+}
+
+function notifyRequest(req) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('登录请求 - ' + req.site, {body: req.reason || '需要人工登录'});
+    } else if ('Notification' in window && Notification.permission !== 'denied') {
+        Notification.requestPermission();
+    }
+}
+
+var titleInterval = null;
+function startTitleFlash(count) {
+    if (titleInterval) return;
+    titleInterval = setInterval(function() {
+        document.title = document.title === originalTitle ? '[' + count + ' 待登录] ' + originalTitle : originalTitle;
+    }, 1000);
+}
+function stopTitleFlash() {
+    if (titleInterval) { clearInterval(titleInterval); titleInterval = null; }
+    document.title = originalTitle;
+}
+
+// ---- API 文档 ----
+function loadDocs() {
+    fetch('/api/docs').then(function(r){return r.json()}).then(function(data) {
+        var html = '';
+        data.endpoints.forEach(function(ep) {
+            html += '<div class="ep">' +
+                '<span class="ep-method ep-' + ep.method.toLowerCase() + '">' + ep.method + '</span>' +
+                '<span class="ep-path">' + escapeHtml(ep.path) + '</span>' +
+                '<div class="ep-desc">' + escapeHtml(ep.description) + '</div>' +
+                (ep.body ? '<div class="ep-desc"><strong>请求体:</strong> <code>' + escapeHtml(ep.body) + '</code></div>' : '') +
+                (ep.response ? '<div class="ep-desc"><strong>响应:</strong> <code>' + escapeHtml(ep.response) + '</code></div>' : '') +
+            '</div>';
+        });
+        document.getElementById('docs-endpoints').innerHTML = html;
+        document.getElementById('docs-python').textContent = data.usage_example_python || '';
+        document.getElementById('docs-curl').textContent = data.usage_example_curl || '';
+    });
+}
+
+// ---- 自动刷新 ----
+setInterval(function() {
+    refreshPending();
+    if (currentTab === 'credentials') refreshCredentials();
+    if (currentTab === 'recorder') {
+        pollRecording();
+        pollReplay();
+    }
+}, 3000);
+
+// ---- 脚本录制 ----
+var recordingSite = null;
+var recordingTimer = null;
+
+function refreshRecorder() {
+    // 加载已保存凭据的站点列表到 datalist
+    fetch('/api/sites').then(function(r){return r.json()}).then(function(data) {
+        var dl = document.getElementById('rec-site-list');
+        dl.innerHTML = data.sites.map(function(s){return '<option value="'+escapeHtml(s)+'">'}).join('');
+    });
+    // 当站点输入变化时加载脚本列表
+    var site = document.getElementById('rec-site').value.trim();
+    if (site) loadScriptList(site);
+    restoreRecordingSession();
+}
+
+var recSiteDebounce = null;
+function onRecSiteChange() {
+    if (recSiteDebounce) clearTimeout(recSiteDebounce);
+    recSiteDebounce = setTimeout(function() {
+        var site = document.getElementById('rec-site').value.trim();
+        if (site) loadScriptList(site);
+        else document.getElementById('script-list').innerHTML = '<div class="empty">输入站点标识后显示脚本</div>';
+    }, 300);
+}
+
+function loadScriptList(site) {
+    fetch('/api/scripts/' + encodeURIComponent(site)).then(function(r){return r.json()}).then(function(data) {
+        var list = document.getElementById('script-list');
+        if (data.count === 0) {
+            list.innerHTML = '<div class="empty">暂无已录制的脚本</div>';
+            return;
+        }
+        var typeBadge = {'pre':'<span class="badge" style="background:#e3f2fd;color:#1565c0">前置</span>',
+                         'main':'<span class="badge active">主操作</span>',
+                         'post':'<span class="badge" style="background:#f3e5f5;color:#7b1fa2">后置</span>'};
+        var engineBadge = {'web':'<span style="font-size:11px;color:#4A90D9">[网页]</span>',
+                          'exec':'<span style="font-size:11px;color:#e65100">[命令]</span>'};
+        var rows = data.scripts.map(function(s) {
+            var eng = s.engine || 'web';
+            var engLabel = engineBadge[eng] || eng;
+            var detail = eng === 'exec' ? escapeHtml(s.command||'') : (s.action_count + ' 个动作');
+            var encSite = encodeURIComponent(s.site || site);
+            var encName = encodeURIComponent(s.name);
+            var encLabel = escapeHtml(s.label||s.name);
+            return '<tr>' +
+                '<td><strong>' + escapeHtml(s.name) + '</strong> ' + engLabel + '<br><span class="muted">' + escapeHtml(s.label||'') + '</span></td>' +
+                '<td>' + (typeBadge[s.type] || s.type) + '</td>' +
+                '<td>' + escapeHtml(s.description||'-') + '</td>' +
+                '<td>' + detail + '</td>' +
+                '<td>' + escapeHtml(s.updated_at||'-') + '</td>' +
+                '<td class="actions">' +
+                    '<button class="btn btn-primary btn-sm" onclick="openReplayPanel(\''+encSite+'\',\''+encName+'\',\''+encLabel+'\')">回放</button>' +
+                    '<button class="btn btn-danger btn-sm" onclick="deleteScript(\''+encSite+'\',\''+encName+'\')">删除</button>' +
+                '</td>' +
+            '</tr>';
+        });
+        list.innerHTML = '<table><thead><tr><th>脚本</th><th>类型</th><th>描述</th><th>内容</th><th>更新时间</th><th>操作</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>';
+    }).catch(function(){});
+}
+
+function startRecording() {
+    var site = document.getElementById('rec-site').value.trim();
+    var name = document.getElementById('rec-name').value.trim();
+    if (!site) { showToast('请输入站点标识', 'error'); return; }
+    if (!name) { showToast('请输入脚本名称', 'error'); return; }
+    var loginUrl = document.getElementById('rec-login-url').value.trim();
+    var body = {
+        login_url: loginUrl,
+        channel: document.getElementById('rec-channel').value
+    };
+    fetch('/api/record/' + encodeURIComponent(site), {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+    }).then(function(r){return r.json()}).then(function(data) {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('浏览器已启动，请操作', 'success');
+        showRecordingPanel(site);
+    }).catch(function(){ showToast('请求失败', 'error'); });
+}
+
+function showRecordingPanel(site) {
+    recordingSite = site;
+    document.getElementById('rec-session-site').textContent = site;
+    document.getElementById('rec-current-url').textContent = '...';
+    document.getElementById('rec-action-count').textContent = '0';
+    document.getElementById('rec-session').style.display = 'block';
+    if (recordingTimer) clearInterval(recordingTimer);
+    recordingTimer = setInterval(pollRecording, 1500);
+    pollRecording();
+}
+
+function hideRecordingPanel() {
+    if (recordingTimer) { clearInterval(recordingTimer); recordingTimer = null; }
+    recordingSite = null;
+    document.getElementById('rec-session').style.display = 'none';
+}
+
+function pollRecording() {
+    if (!recordingSite) return;
+    var site = recordingSite;
+    fetch('/api/record/' + encodeURIComponent(site)).then(function(r){return r.json()}).then(function(data) {
+        if (recordingSite !== site) return;
+        if (data.current_url) document.getElementById('rec-current-url').textContent = data.current_url;
+        if (data.action_count !== undefined) document.getElementById('rec-action-count').textContent = data.action_count;
+        if (data.status === 'recording' || data.status === 'starting') return;
+        hideRecordingPanel();
+        if (data.status === 'completed') {
+            showToast('录制完成，请点击保存', 'info');
+        } else if (data.status === 'cancelled') {
+            showToast('已取消录制', 'info');
+        } else {
+            showToast('录制结束: ' + (data.error||data.status), 'error');
+        }
+    }).catch(function(){});
+}
+
+function completeRecording() {
+    var site = recordingSite;
+    if (!site) return;
+    var name = document.getElementById('rec-name').value.trim();
+    var label = document.getElementById('rec-label').value.trim();
+    var type = document.getElementById('rec-type').value;
+    var desc = document.getElementById('rec-desc').value.trim();
+    if (!name) { showToast('请输入脚本名称', 'error'); return; }
+    fetch('/api/record/' + encodeURIComponent(site) + '/complete', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({name:name, label:label, type:type, description:desc})
+    }).then(function(r){return r.json()}).then(function(data) {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('脚本已保存: ' + name + ' (' + data.action_count + ' 个动作)', 'success');
+        hideRecordingPanel();
+        loadScriptList(site);
+    }).catch(function(){ showToast('请求失败', 'error'); });
+}
+
+function cancelRecording() {
+    if (!recordingSite) return;
+    if (!confirm('取消录制？已录制的操作将丢失')) return;
+    var site = recordingSite;
+    fetch('/api/record/' + encodeURIComponent(site) + '/cancel', {method:'POST'})
+        .then(function(r){return r.json()}).then(function(data) {
+            hideRecordingPanel();
+            showToast('已取消', 'info');
+        }).catch(function(){ hideRecordingPanel(); });
+}
+
+function restoreRecordingSession() {
+    fetch('/api/recordings/list').then(function(r){return r.json()}).then(function(data) {
+        var active = null;
+        (data.recordings||[]).forEach(function(c) {
+            if ((c.status === 'recording' || c.status === 'starting') && !active) active = c;
+        });
+        if (active) {
+            document.getElementById('rec-site').value = active.site;
+            showRecordingPanel(active.site);
+        }
+    }).catch(function(){});
+}
+
+function deleteScript(encodedSite, encodedName) {
+    var site = decodeURIComponent(encodedSite);
+    var name = decodeURIComponent(encodedName);
+    if (!confirm('确认删除脚本 ' + name + '？')) return;
+    fetch('/api/scripts/' + encodeURIComponent(site) + '/' + encodeURIComponent(name), {method:'DELETE'})
+        .then(function(r){return r.json()}).then(function(data) {
+            if (data.status === 'deleted') { showToast('已删除', 'success'); loadScriptList(site); }
+            else showToast('删除失败', 'error');
+        });
+}
+
+function toggleExecPanel() {
+    var site = document.getElementById('rec-site').value.trim();
+    if (!site) { showToast('请先输入站点标识', 'error'); return; }
+    var panel = document.getElementById('exec-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveExecScript() {
+    var site = document.getElementById('rec-site').value.trim();
+    var name = document.getElementById('exec-name').value.trim();
+    var command = document.getElementById('exec-command').value.trim();
+    if (!site) { showToast('请先输入站点标识', 'error'); return; }
+    if (!name) { showToast('请输入脚本名称', 'error'); return; }
+    if (!command) { showToast('请输入命令', 'error'); return; }
+    var body = {
+        engine: 'exec',
+        name: name,
+        label: document.getElementById('exec-label').value.trim() || name,
+        type: document.getElementById('exec-type').value,
+        command: command,
+        cwd: document.getElementById('exec-cwd').value.trim(),
+        timeout: parseInt(document.getElementById('exec-timeout').value) || 120,
+        description: document.getElementById('exec-desc').value.trim()
+    };
+    fetch('/api/scripts/' + encodeURIComponent(site) + '/' + encodeURIComponent(name), {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+    }).then(function(r){return r.json()}).then(function(data) {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('脚本已保存: ' + name, 'success');
+        document.getElementById('exec-panel').style.display = 'none';
+        // 清空表单
+        ['exec-name','exec-label','exec-command','exec-cwd','exec-desc'].forEach(function(id){
+            document.getElementById(id).value = '';
+        });
+        document.getElementById('exec-timeout').value = '120';
+        loadScriptList(site);
+    }).catch(function(){ showToast('请求失败', 'error'); });
+}
+
+// ---- 回放编排 ----
+var replayMainSite = null;
+var replayMainName = null;
+var replayTimer = null;
+
+function openReplayPanel(encodedSite, encodedName, label) {
+    replayMainSite = decodeURIComponent(encodedSite);
+    replayMainName = decodeURIComponent(encodedName);
+    document.getElementById('replay-main-info').innerHTML =
+        '主操作: <strong>' + escapeHtml(label) + '</strong> (' + escapeHtml(replayMainName) + ')';
+    document.getElementById('replay-panel').style.display = 'block';
+    document.getElementById('replay-status').style.display = 'none';
+    // 加载该站点的其他脚本到 pre/post 下拉框
+    fetch('/api/scripts/' + encodeURIComponent(replayMainSite)).then(function(r){return r.json()}).then(function(data) {
+        var pre = document.getElementById('replay-pre');
+        var post = document.getElementById('replay-post');
+        pre.innerHTML = ''; post.innerHTML = '';
+        (data.scripts||[]).forEach(function(s) {
+            if (s.name === replayMainName) return;
+            var opt = '<option value="'+escapeHtml(s.name)+'">'+escapeHtml(s.name)+' ('+escapeHtml(s.label||s.type)+')</option>';
+            pre.innerHTML += opt; post.innerHTML += opt;
+        });
+    });
+}
+
+function startReplay() {
+    if (!replayMainSite || !replayMainName) { showToast('请先选择脚本', 'error'); return; }
+    var pre = [], post = [];
+    Array.prototype.forEach.call(document.getElementById('replay-pre').selectedOptions, function(o){pre.push(o.value)});
+    Array.prototype.forEach.call(document.getElementById('replay-post').selectedOptions, function(o){post.push(o.value)});
+    var body = {
+        main: replayMainName,
+        pre: pre, post: post,
+        screenshots: document.getElementById('replay-screenshots').checked
+    };
+    fetch('/api/replay/' + encodeURIComponent(replayMainSite), {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+    }).then(function(r){return r.json()}).then(function(data) {
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('回放已启动...', 'info');
+        document.getElementById('replay-status').style.display = 'block';
+        if (replayTimer) clearInterval(replayTimer);
+        replayTimer = setInterval(pollReplay, 1500);
+        pollReplay();
+    }).catch(function(){ showToast('请求失败', 'error'); });
+}
+
+function pollReplay() {
+    if (!replayMainSite) return;
+    var site = replayMainSite;
+    fetch('/api/replay/' + encodeURIComponent(site)).then(function(r){return r.json()}).then(function(data) {
+        if (!data || data.status === 'missing') return;
+        var box = document.getElementById('replay-status');
+        var html = '<div style="margin-bottom:8px"><strong>状态:</strong> ';
+        var statusBadge = {'running':'<span class="badge pending">运行中</span>',
+                           'completed':'<span class="badge active">已完成</span>',
+                           'failed':'<span class="badge expired">失败</span>',
+                           'cancelled':'<span class="badge expired">已取消</span>'};
+        html += statusBadge[data.status] || data.status;
+        if (data.current_step) html += ' | <strong>当前:</strong> ' + escapeHtml(data.current_step);
+        if (data.total_steps) html += ' | <strong>进度:</strong> ' + data.current_step_index + '/' + data.total_steps;
+        html += '</div>';
+        // 日志（最后 10 条）
+        var logs = data.log || [];
+        var recent = logs.slice(-10);
+        if (recent.length) {
+            html += '<div style="max-height:200px;overflow-y:auto;background:#f5f5f5;border-radius:4px;padding:8px;font-size:12px">';
+            recent.forEach(function(e) {
+                var color = e.status === 'ok' ? '#2e7d32' : '#c62828';
+                var eng = e.engine || 'web';
+                var actionDesc;
+                if (eng === 'exec') {
+                    actionDesc = 'exec: ' + escapeHtml(e.action.command || '');
+                } else {
+                    actionDesc = escapeHtml(e.action.type) + (e.action.selector?' → '+escapeHtml(e.action.selector):'');
+                }
+                html += '<div style="color:'+color+'">[' + escapeHtml(e.phase)+'/'+escapeHtml(e.script)+'/'+e.step + '] '
+                    + actionDesc
+                    + (e.message?' <span style="color:#999">'+escapeHtml(e.message).substring(0,200)+'</span>':'')
+                    + '</div>';
+            });
+            html += '</div>';
+        }
+        box.innerHTML = html;
+        if (data.status === 'completed' || data.status === 'failed' || data.status === 'cancelled') {
+            if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
+        }
+    }).catch(function(){});
+}
+
+function cancelReplay() {
+    if (!replayMainSite) return;
+    fetch('/api/replay/' + encodeURIComponent(replayMainSite) + '/cancel', {method:'POST'})
+        .then(function(r){return r.json()}).then(function(data) {
+            showToast('已取消回放', 'info');
+            if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
+        }).catch(function(){});
+}
+
+// 初始化
+if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+}
+refreshCredentials();
+refreshPending();
+refreshDependency();
+restoreCaptureSessions();
+</script>
+</body>
+</html>
